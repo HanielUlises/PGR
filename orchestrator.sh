@@ -17,27 +17,27 @@ check_deps() {
 }
 
 step_gnn() {
-    log "step 1 — running GNN (PyG)"
+    log "step 1. running GNN (PyG)"
     cd "$ROOT/python"
     $PYTHON gnn_model.py
     cd "$ROOT"
 }
 
 step_bridge() {
-    log "step 2 — processing bridge JSON"
+    log "step 2. processing bridge JSON"
     cd "$ROOT/python"
     $PYTHON bridge_processor.py "$ROOT/bridge/lean_input.json"
     cd "$ROOT"
 }
 
 step_lean() {
-    log "step 3 — building Lean 4 symbolic core"
+    log "step 3. building Lean 4 symbolic core"
     cd "$ROOT"
     $LAKE build NeuroSymbolicGraph
 }
 
 step_verify() {
-    log "step 4 — running Lean verifier"
+    log "step 4. running Lean verifier"
     cd "$ROOT"
     $LAKE env lean lean/GraphVerifier.lean
 }
