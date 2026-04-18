@@ -1,0 +1,55 @@
+{
+  "graph": {
+    "vertex_count": 6,
+    "edges": [
+      [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 2]
+    ],
+    "node_features": [
+      [1.0, 0.0, 0.5],
+      [0.0, 1.0, 0.3],
+      [1.0, 1.0, 0.9],
+      [0.0, 0.0, 0.1],
+      [1.0, 0.5, 0.7],
+      [0.5, 0.5, 0.4]
+    ],
+    "labels": [1, 0, 1, 0, 1, 0]
+  },
+  "rules": [
+    {
+      "name": "transitivity",
+      "arity": 3,
+      "pattern": "Adj a b ∧ Adj b c → Adj a c",
+      "lean_tactic": "exact SimpleGraph.Reachable.trans",
+      "description": "If a connects to b and b connects to c, then a can reach c"
+    },
+    {
+      "name": "symmetry",
+      "arity": 2,
+      "pattern": "Adj a b → Adj b a",
+      "lean_tactic": "exact SimpleGraph.adj_comm.mp",
+      "description": "Adjacency in SimpleGraph is symmetric"
+    },
+    {
+      "name": "reachability_via_path",
+      "arity": 2,
+      "pattern": "∃ p : G.Walk u v, p.length ≥ 1 → G.Reachable u v",
+      "lean_tactic": "exact fun ⟨w, _⟩ => w.reachable",
+      "description": "A walk of positive length witnesses reachability"
+    },
+    {
+      "name": "connected_component_closure",
+      "arity": 2,
+      "pattern": "G.Reachable u v → connectedComponent G u = connectedComponent G v",
+      "lean_tactic": "exact SimpleGraph.ConnectedComponent.sound",
+      "description": "Reachable nodes share a connected component"
+    },
+    {
+      "name": "high_confidence_edge",
+      "arity": 2,
+      "pattern": "gnn_score a b ≥ 0.7 → Candidate a b",
+      "lean_tactic": "intro h; exact h",
+      "description": "GNN edges above confidence threshold become symbolic candidates"
+    }
+  ],
+  "gnn_predictions": []
+}

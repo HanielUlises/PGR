@@ -1,0 +1,15 @@
+[package]
+name = "NeuroSymbolicGraph"
+version = "0.1.0"
+keywords = ["graph", "neuro-symbolic", "metaprogramming", "dynamic-rules"]
+license = "MIT"
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "master"
+
+[[lean_lib]]
+name = "NeuroSymbolicGraph"
+roots = ["lean"]
+globs = ["lean.SymbolicCore", "lean.GraphVerifier"]
