@@ -1,0 +1,34 @@
+# Lean / Lake
+.lake/
+*.olean
+*.ilean
+*.c
+*.o
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# PyTorch
+*.pt
+*.pth
+*.ckpt
+
+# Bridge output (generated, not source)
+bridge/lean_input.json
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
