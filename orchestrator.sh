@@ -18,14 +18,14 @@ check_deps() {
 
 step_gnn() {
     log "step 1. running GNN (PyG)"
-    cd "$ROOT/python"
+    cd "$ROOT/inference"
     $PYTHON gnn_model.py
     cd "$ROOT"
 }
 
 step_bridge() {
     log "step 2. processing bridge JSON"
-    cd "$ROOT/python"
+    cd "$ROOT/inference"
     $PYTHON bridge_processor.py "$ROOT/bridge/lean_input.json"
     cd "$ROOT"
 }
@@ -39,7 +39,7 @@ step_lean() {
 step_verify() {
     log "step 4. running Lean verifier"
     cd "$ROOT"
-    $LAKE env lean lean/GraphVerifier.lean
+    $LAKE env lean reasoning/GraphVerifier.lean
 }
 
 usage() {

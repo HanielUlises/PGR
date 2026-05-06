@@ -10,8 +10,8 @@ rev = "master"
 
 [[lean_lib]]
 name = "NeuroSymbolicGraph"
-roots = ["lean"]
-globs = ["lean.SymbolicCore", "lean.GraphVerifier"]
+roots = ["reasoning"]
+globs = ["reasoning.SymbolicCore", "reasoning.GraphVerifier"]
 
 [[require]]
 name = "PropLogicDSL"
