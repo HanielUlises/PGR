@@ -13,3 +13,8 @@ rev = "master"
 name = "NeuroSymbolicGraph"
 roots = ["lean"]
 globs = ["lean.SymbolicCore", "lean.GraphVerifier"]
+
+[[require]]
+name = "PropLogicDSL"
+git = "https://github.com/HanielUlises/lean-logic-dsl"
+rev = "main"
