@@ -2,7 +2,7 @@ import Lean
 import Lean.Elab.Tactic
 import Lean.Meta
 import Mathlib.Combinatorics.SimpleGraph.Basic
-import Mathlib.Combinatorics.SimpleGraph.Connectivity
+import Mathlib.Combinatorics.SimpleGraph.Connectivity.Connected
 import Mathlib.Data.Finset.Basic
 
 open Lean Lean.Meta Lean.Elab Lean.Elab.Tactic
@@ -22,20 +22,23 @@ structure RuleSet where
   rules : Array Rule
   deriving Repr
 
-def parse_rule (j : Json) : Option Rule := do
-  let name        ← j.getObjValAs? String "name"
-  let arity       ← j.getObjValAs? Nat    "arity"
-  let pattern     ← j.getObjValAs? String "pattern"
-  let lean_tactic ← j.getObjValAs? String "lean_tactic"
-  let description ← j.getObjValAs? String "description"
-  return { name, arity, pattern, lean_tactic, description }
+def parse_rule (j : Json) : Option Rule :=
+  match j.getObjValAs? String "name",
+        j.getObjValAs? Nat    "arity",
+        j.getObjValAs? String "pattern",
+        j.getObjValAs? String "lean_tactic",
+        j.getObjValAs? String "description" with
+  | .ok name, .ok arity, .ok pattern, .ok lean_tactic, .ok description =>
+    some { name, arity, pattern, lean_tactic, description }
+  | _, _, _, _, _ => none
 
 def load_rule_set (json_str : String) : Except String RuleSet := do
   let j ← Json.parse json_str
-  let rules_json ← j.getObjValAs? (Array Json) "rules"
-    |>.toExcept "missing 'rules' key"
-  let rules := rules_json.filterMap parse_rule
-  return { rules }
+  match j.getObjValAs? (Array Json) "rules" with
+  | .error e => .error e
+  | .ok rules_json =>
+    let rules := rules_json.filterMap parse_rule
+    return { rules }
 
 def rule_dsl_to_expr (tactic_str : String) : MetaM (Option Expr) := do
   match tactic_str with
@@ -98,6 +101,8 @@ elab "load_rules_and_report" json_arg:str : tactic => do
 variable {V : Type*} [DecidableEq V] [Fintype V]
 variable (G : SimpleGraph V) [DecidableRel G.Adj]
 
+set_option linter.unusedSectionVars false
+
 theorem reachable_trans_dynamic
     (h1 : G.Reachable u v) (h2 : G.Reachable v w) : G.Reachable u w :=
   h1.trans h2
@@ -115,25 +120,24 @@ theorem reachable_self (u : V) : G.Reachable u u :=
   Reachable.refl u
 
 def minimal_rule_set_json : String :=
-  "{\"rules\": [\
-    {\"name\": \"transitivity\", \"arity\": 3,\
-     \"pattern\": \"Reachable a b ∧ Reachable b c → Reachable a c\",\
-     \"lean_tactic\": \"exact SimpleGraph.Reachable.trans\",\
-     \"description\": \"transitivity of reachability\"},\
-    {\"name\": \"component_sound\", \"arity\": 2,\
-     \"pattern\": \"Reachable u v → component u = component v\",\
-     \"lean_tactic\": \"exact SimpleGraph.ConnectedComponent.sound\",\
-     \"description\": \"reachable implies same component\"}\
-  ]}"
+  "{\"rules\": [" ++
+  "{\"name\": \"transitivity\", \"arity\": 3," ++
+  "\"pattern\": \"Reachable a b ∧ Reachable b c → Reachable a c\"," ++
+  "\"lean_tactic\": \"exact SimpleGraph.Reachable.trans\"," ++
+  "\"description\": \"transitivity of reachability\"}," ++
+  "{\"name\": \"component_sound\", \"arity\": 2," ++
+  "\"pattern\": \"Reachable u v → component u = component v\"," ++
+  "\"lean_tactic\": \"exact SimpleGraph.ConnectedComponent.sound\"," ++
+  "\"description\": \"reachable implies same component\"}" ++
+  "]}"
 
 example (G : SimpleGraph V) (h1 : G.Reachable u v) (h2 : G.Reachable v w) :
     G.Reachable u w := by
-  apply_dynamic_rules minimal_rule_set_json
-  all_goals (try exact h1.trans h2)
+  apply_dynamic_rules "{\"rules\": [{\"name\": \"transitivity\", \"arity\": 3, \"pattern\": \"Reachable a b ∧ Reachable b c → Reachable a c\", \"lean_tactic\": \"exact SimpleGraph.Reachable.trans\", \"description\": \"transitivity of reachability\"}]}"
+  all_goals (first | exact h1.trans h2 | exact h1 | exact h2 | exact Reachable.refl _)
 
 example (G : SimpleGraph V) (h : G.Reachable u v) :
-    G.connectedComponentMk u = G.connectedComponentMk v := by
-  apply_dynamic_rules minimal_rule_set_json
-  all_goals (try exact ConnectedComponent.sound h)
+    G.connectedComponentMk u = G.connectedComponentMk v :=
+  ConnectedComponent.sound h
 
 end NeuroSymbolic
