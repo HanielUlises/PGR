@@ -1,4 +1,3 @@
-[package]
 name = "NeuroSymbolicGraph"
 version = "0.1.0"
 keywords = ["graph", "neuro-symbolic", "metaprogramming", "dynamic-rules"]
