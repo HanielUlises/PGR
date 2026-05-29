@@ -161,8 +161,6 @@ def run_gnn(threshold: float = 0.7):
     all_predictions = predict(model, dataset, threshold=threshold)
     high_conf = [p for p in all_predictions if p["above_threshold"]]
 
-    # Write ALL predictions back so the bridge can inspect the full distribution.
-    # The bridge then applies the threshold for what it forwards to Lean.
     raw["gnn_predictions"] = all_predictions
 
     with open(BRIDGE_PATH, "w") as f:
