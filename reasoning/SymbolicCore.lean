@@ -10,10 +10,6 @@ open SimpleGraph
 
 namespace NeuroSymbolic
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Rule representation
--- ─────────────────────────────────────────────────────────────────────────────
-
 structure Rule where
   name        : String
   arity       : Nat
@@ -44,14 +40,6 @@ def load_rule_set (json_str : String) : Except String RuleSet := do
     let rules := rules_json.filterMap parse_rule
     return { rules }
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Tactic dispatch
---
--- Maps the lean_tactic string from JSON to a Lean expression.
--- Every rule in facts_and_rules.json must have an entry here.
--- Adding a new rule = add one match arm; no recompilation of the pipeline.
--- ─────────────────────────────────────────────────────────────────────────────
-
 def rule_dsl_to_expr (tactic_str : String) : MetaM (Option Expr) := do
   match tactic_str with
   | "exact SimpleGraph.Reachable.trans" =>
@@ -77,10 +65,6 @@ def rule_dsl_to_expr (tactic_str : String) : MetaM (Option Expr) := do
     -- that haven't been wired up yet.
     logInfo m!"[rule_dsl_to_expr] no mapping for tactic: '{tactic_str}' — skipped"
     return none
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Rule application
--- ─────────────────────────────────────────────────────────────────────────────
 
 def apply_rule_to_goal (rule : Rule) (goal : MVarId) : MetaM (List MVarId) := do
   let target ← goal.getType
@@ -108,10 +92,6 @@ def apply_rule_set (rs : RuleSet) (goal : MVarId) : MetaM (List MVarId) := do
     remaining := next_remaining
   return remaining
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Tactics
--- ─────────────────────────────────────────────────────────────────────────────
-
 /-- Apply all rules from a JSON rule set to the current goal. -/
 elab "apply_dynamic_rules" json_arg:str : tactic => do
   let json_str := json_arg.getString
@@ -124,7 +104,6 @@ elab "apply_dynamic_rules" json_arg:str : tactic => do
     let remaining ← apply_rule_set rs goal
     replaceMainGoal remaining
 
-/-- Load a rule set from JSON and log each rule — useful for debugging. -/
 elab "load_rules_and_report" json_arg:str : tactic => do
   let json_str := json_arg.getString
   match load_rule_set json_str with
@@ -134,10 +113,6 @@ elab "load_rules_and_report" json_arg:str : tactic => do
     for r in rs.rules do
       logInfo m!"rule [{r.name}] arity={r.arity} — {r.description}"
   pure ()
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Generic graph theorems (used by GraphVerifier)
--- ─────────────────────────────────────────────────────────────────────────────
 
 set_option linter.unusedSectionVars false
 
@@ -159,10 +134,6 @@ theorem adj_implies_reachable (h : G.Adj u v) : G.Reachable u v :=
 theorem reachable_self (u : V) : G.Reachable u u :=
   Reachable.refl u
 
--- ─────────────────────────────────────────────────────────────────────────────
--- Smoke tests — these must compile to confirm the dynamic dispatch works
--- ─────────────────────────────────────────────────────────────────────────────
-
 private def transitivityRuleJSON : String :=
   "{\"rules\": [{\"name\": \"transitivity\", \"arity\": 3, " ++
   "\"pattern\": \"Reachable a b ∧ Reachable b c → Reachable a c\", " ++
@@ -175,7 +146,6 @@ private def componentRuleJSON : String :=
   "\"lean_tactic\": \"exact SimpleGraph.ConnectedComponent.sound\", " ++
   "\"description\": \"reachable implies same component\"}]}"
 
--- apply_dynamic_rules should reduce the goal; the fallback closes any remainder.
 example (G : SimpleGraph V) (h1 : G.Reachable u v) (h2 : G.Reachable v w) :
     G.Reachable u w := by
   apply_dynamic_rules transitivityRuleJSON
