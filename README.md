@@ -1,4 +1,4 @@
-# graph-neuro-symbolic
+# Provable Graph Reasoning
 
 A hybrid neuro-symbolic system for graph reasoning, combining GNN-based
 structure inference with Lean 4 metaprogrammed formal verification.
