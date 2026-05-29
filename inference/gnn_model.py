@@ -1,5 +1,4 @@
 import json
-import random
 import torch
 import torch.nn.functional as F
 from torch_geometric.data import Data
@@ -11,16 +10,11 @@ BRIDGE_PATH = "../bridge/facts_and_rules.json"
 
 class NeuroSymbolicGNN(torch.nn.Module):
     """
-    GNN encoder + edge MLP for link prediction.
+    GNN encoder (3x GCNConv) + edge MLP for link prediction.
 
-    The encoder (3x GCNConv) produces node embeddings that capture
-    structural neighbourhood context. The edge MLP scores pairs of
-    embeddings, returning a probability that the edge exists.
-
-    Training objective: binary cross-entropy on known positive edges
-    vs. randomly sampled negative edges (edges not in the graph).
-    This is the standard approach for link prediction — the node-label
-    MSE in the original code never backpropagated into the edge MLP at all.
+    encode()      → node embeddings capturing structural neighbourhood context
+    score_edges() → raw logits for a batch of (src, dst) pairs
+    edge_score()  → sigmoid probability for a single (u, v) pair
     """
 
     def __init__(self, in_channels: int, hidden_channels: int, out_channels: int):
@@ -42,17 +36,13 @@ class NeuroSymbolicGNN(torch.nn.Module):
         return self.conv3(x, edge_index)
 
     def score_edges(self, emb: torch.Tensor, edge_pairs: torch.Tensor) -> torch.Tensor:
-        """
-        edge_pairs: (2, E) tensor of (source, target) indices.
-        Returns raw logits of shape (E,).
-        """
+        """edge_pairs: (2, E) — returns raw logits of shape (E,)."""
         src = emb[edge_pairs[0]]
         dst = emb[edge_pairs[1]]
         return self.edge_mlp(torch.cat([src, dst], dim=-1)).squeeze(-1)
 
     def edge_score(self, emb: torch.Tensor, u: int, v: int) -> float:
         """Sigmoid probability for a single (u, v) pair."""
-        pair = torch.stack([emb[u], emb[v]], dim=0).unsqueeze(0)
         src = emb[u].unsqueeze(0)
         dst = emb[v].unsqueeze(0)
         logit = self.edge_mlp(torch.cat([src, dst], dim=-1))
@@ -61,49 +51,41 @@ class NeuroSymbolicGNN(torch.nn.Module):
 
 def load_graph_from_json(path: str) -> tuple[Data, dict]:
     with open(path) as f:
-        data = json.load(f)
-    g = data["graph"]
+        raw = json.load(f)
+    g = raw["graph"]
     x  = torch.tensor(g["node_features"], dtype=torch.float)
     ei = torch.tensor(g["edges"], dtype=torch.long).t().contiguous()
     # SimpleGraph is undirected — keep both directions
     ei_sym = torch.cat([ei, ei.flip(0)], dim=1)
     y = torch.tensor(g["labels"], dtype=torch.long)
-    return Data(x=x, edge_index=ei_sym, y=y), data
+    return Data(x=x, edge_index=ei_sym, y=y), raw
 
 
 def candidate_edges(n: int) -> list[tuple[int, int]]:
+    """All upper-triangle pairs — edges not yet in the graph are candidates."""
     return [(i, j) for i in range(n) for j in range(i + 1, n)]
 
 
 def train(
     model: NeuroSymbolicGNN,
     data: Data,
-    epochs: int = 300,
-    lr: float = 1e-3,
-    neg_ratio: int = 2,
+    epochs: int = 400,
+    lr: float = 5e-3,
+    neg_ratio: int = 1,
 ) -> list[float]:
     """
-    Link prediction training loop.
+    Link prediction training with binary cross-entropy.
 
-    For each epoch:
-      1. Encode all nodes into embeddings.
-      2. Score the known positive edges (those in the graph).
-      3. Sample `neg_ratio` negative edges per positive edge using
-         PyG's negative_sampling (guaranteed not to be in the graph).
-      4. Compute binary cross-entropy between positive scores (label=1)
-         and negative scores (label=0).
-      5. Backpropagate — gradients now flow through both the GCN encoder
-         and the edge MLP, which is what was missing before.
-
-    neg_ratio controls class balance. With a sparse graph, negatives
-    vastly outnumber positives, so we subsample to avoid trivial solutions
-    where the model predicts 0 for everything.
+    neg_ratio=1 keeps class balance on this small graph; higher values
+    push the model to be more conservative (higher precision, lower recall).
+    lr raised to 5e-3 and epochs to 400 so a 6-node graph actually converges
+    within a single run — with 1e-3/300 the model often finishes at loss ~0.69
+    (i.e. essentially random), which is why gnn_predictions was always empty.
     """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    # Only unique directed positive edges (upper triangle)
     pos_ei = data.edge_index
     n = data.x.size(0)
-    history = []
+    history: list[float] = []
 
     model.train()
     for epoch in range(epochs):
@@ -111,11 +93,9 @@ def train(
 
         emb = model.encode(data.x, data.edge_index)
 
-        # Positive edge scores
         pos_scores = model.score_edges(emb, pos_ei)
         pos_labels = torch.ones(pos_scores.size(0))
 
-        # Negative sampling: sample edges not in the graph
         neg_ei = negative_sampling(
             edge_index=data.edge_index,
             num_nodes=n,
@@ -132,7 +112,7 @@ def train(
         optimizer.step()
 
         history.append(loss.item())
-        if epoch % 50 == 0:
+        if epoch % 100 == 0:
             print(f"epoch {epoch:>3}  loss={loss.item():.4f}")
 
     return history
@@ -145,13 +125,12 @@ def predict(
     threshold: float = 0.7,
 ) -> list[dict]:
     """
-    Run inference over all candidate (u, v) pairs and return those
-    whose edge probability exceeds the threshold.
+    Score all candidate (u, v) pairs; return those above the threshold.
 
-    The threshold is the ontological commitment boundary: predictions
-    above it are treated as symbolic candidates for Lean verification.
-    Predictions below it are discarded — the GNN is not confident enough
-    to warrant a formal claim.
+    The threshold is the ontological commitment boundary: predictions above
+    it are forwarded as symbolic candidates for Lean verification. The GNN
+    does not filter here — the bridge processor applies threshold logic so
+    the full score distribution is available for inspection.
     """
     model.eval()
     emb = model.encode(data.x, data.edge_index)
@@ -160,35 +139,41 @@ def predict(
     predictions = []
     for u, v in candidate_edges(n):
         score = model.edge_score(emb, u, v)
-        if score >= threshold:
-            predictions.append({
-                "source": u,
-                "target": v,
-                "confidence": round(score, 4),
-                "above_threshold": True,
-            })
+        predictions.append({
+            "source": u,
+            "target": v,
+            "confidence": round(score, 4),
+            "above_threshold": score >= threshold,
+        })
 
     return predictions
 
 
-def run_gnn():
+def run_gnn(threshold: float = 0.7):
     dataset, raw = load_graph_from_json(BRIDGE_PATH)
 
     model = NeuroSymbolicGNN(in_channels=3, hidden_channels=32, out_channels=16)
 
     print("=== training (link prediction) ===")
-    train(model, dataset, epochs=300)
+    train(model, dataset)
 
     print("\n=== inference ===")
-    predictions = predict(model, dataset, threshold=0.7)
+    all_predictions = predict(model, dataset, threshold=threshold)
+    high_conf = [p for p in all_predictions if p["above_threshold"]]
 
-    raw["gnn_predictions"] = predictions
+    # Write ALL predictions back so the bridge can inspect the full distribution.
+    # The bridge then applies the threshold for what it forwards to Lean.
+    raw["gnn_predictions"] = all_predictions
+
     with open(BRIDGE_PATH, "w") as f:
         json.dump(raw, f, indent=2)
 
-    print(f"\n{len(predictions)} high-confidence edges written to bridge")
-    for p in predictions:
+    print(f"\n{len(high_conf)} high-confidence edges (>= {threshold}) written to bridge")
+    for p in high_conf:
         print(f"  ({p['source']}, {p['target']})  score={p['confidence']}")
+
+    if not high_conf:
+        print("  (none above threshold — try lowering threshold or check training convergence)")
 
 
 if __name__ == "__main__":
