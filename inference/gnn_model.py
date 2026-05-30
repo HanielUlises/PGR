@@ -24,9 +24,6 @@ from torch_geometric.utils import negative_sampling, to_undirected, degree
 GRAPH_PATH       = "../bridge/graph.json"
 PREDICTIONS_PATH = "../bridge/predictions.json"
 
-
-# ── Feature engineering ───────────────────────────────────────────────────────
-
 def structural_features(edge_index: torch.Tensor, num_nodes: int) -> torch.Tensor:
     """
     Degree-based node features derived entirely from topology.
@@ -40,8 +37,6 @@ def structural_features(edge_index: torch.Tensor, num_nodes: int) -> torch.Tenso
     max_deg = deg.max().clamp(min=1.0)
     return torch.stack([deg, deg / max_deg, (deg + 1.0).log()], dim=1)
 
-
-# ── Model ─────────────────────────────────────────────────────────────────────
 
 class ContentGNN(torch.nn.Module):
     """
@@ -90,9 +85,6 @@ class ContentGNN(torch.nn.Module):
         vs = torch.tensor([v for u in range(n) for v in range(u + 1, n)])
         return list(zip(us.tolist(), vs.tolist())), self.score_edges(emb, torch.stack([us, vs]))
 
-
-# ── Data ──────────────────────────────────────────────────────────────────────
-
 def load_graph(path: str = GRAPH_PATH) -> tuple[Data, dict]:
     with open(path) as f:
         raw = json.load(f)
@@ -103,9 +95,6 @@ def load_graph(path: str = GRAPH_PATH) -> tuple[Data, dict]:
     x      = structural_features(ei_sym, num_nodes=n)
     y      = torch.tensor(g.get("labels", [0] * n), dtype=torch.long)
     return Data(x=x, edge_index=ei_sym, num_nodes=n, y=y), raw
-
-
-# ── Training ──────────────────────────────────────────────────────────────────
 
 def _auc(pos: torch.Tensor, neg: torch.Tensor) -> float:
     if pos.numel() == 0 or neg.numel() == 0:
@@ -166,9 +155,6 @@ def train(
 
     return history
 
-
-# ── Inference ─────────────────────────────────────────────────────────────────
-
 @torch.no_grad()
 def predict(model: ContentGNN, data: Data) -> list[dict]:
     """
@@ -183,9 +169,6 @@ def predict(model: ContentGNN, data: Data) -> list[dict]:
         {"source": u, "target": v, "confidence": round(s, 4)}
         for (u, v), s in zip(pairs, scores.tolist())
     ]
-
-
-# ── Entry point ───────────────────────────────────────────────────────────────
 
 def run(threshold: float = 0.7):
     data, raw = load_graph()
