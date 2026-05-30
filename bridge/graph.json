@@ -1,0 +1,15 @@
+{
+  "_note": "This file contains graph content only — nodes, edges, labels. Structural laws live in form/Laws.lean and are not repeated here.",
+  "graph": {
+    "vertex_count": 6,
+    "edges": [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+      [0, 5],
+      [5, 2]
+    ],
+    "labels": [1, 0, 1, 0, 1, 0]
+  }
+}

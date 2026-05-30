@@ -1,0 +1,7 @@
+{
+  "_note": "Written by content/gnn_model.py at runtime. Do not edit manually.",
+  "vertex_count": 0,
+  "base_edges": [],
+  "threshold": 0.7,
+  "predictions": []
+}
