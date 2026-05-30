@@ -8,7 +8,7 @@ import Mathlib.Data.Finset.Basic
 open Lean Lean.Meta Lean.Elab Lean.Elab.Tactic
 open SimpleGraph
 
-namespace NeuroSymbolic
+namespace Form
 
 structure Rule where
   name        : String
@@ -44,25 +44,15 @@ def rule_dsl_to_expr (tactic_str : String) : MetaM (Option Expr) := do
   match tactic_str with
   | "exact SimpleGraph.Reachable.trans" =>
     return some (← mkConstWithFreshMVarLevels ``SimpleGraph.Reachable.trans)
-
   | "exact SimpleGraph.adj_comm.mp" =>
-    -- adj_comm gives (G.Adj u v ↔ G.Adj v u); .mp extracts the forward direction.
     return some (← mkConstWithFreshMVarLevels ``SimpleGraph.adj_comm)
-
   | "exact SimpleGraph.ConnectedComponent.sound" =>
     return some (← mkConstWithFreshMVarLevels ``SimpleGraph.ConnectedComponent.sound)
-
   | "exact SimpleGraph.Reachable.refl" =>
     return some (← mkConstWithFreshMVarLevels ``SimpleGraph.Reachable.refl)
-
   | "exact SimpleGraph.Adj.reachable" =>
-    -- Witnesses reachability from a single adjacency fact
     return some (← mkConstWithFreshMVarLevels ``SimpleGraph.Adj.reachable)
-
   | _ =>
-    -- Unknown tactic string — log and skip rather than fail hard.
-    -- This keeps the pipeline running when the JSON contains rules
-    -- that haven't been wired up yet.
     logInfo m!"[rule_dsl_to_expr] no mapping for tactic: '{tactic_str}' — skipped"
     return none
 
@@ -92,7 +82,6 @@ def apply_rule_set (rs : RuleSet) (goal : MVarId) : MetaM (List MVarId) := do
     remaining := next_remaining
   return remaining
 
-/-- Apply all rules from a JSON rule set to the current goal. -/
 elab "apply_dynamic_rules" json_arg:str : tactic => do
   let json_str := json_arg.getString
   let goal ← getMainGoal
@@ -107,8 +96,7 @@ elab "apply_dynamic_rules" json_arg:str : tactic => do
 elab "load_rules_and_report" json_arg:str : tactic => do
   let json_str := json_arg.getString
   match load_rule_set json_str with
-  | .error e =>
-    logWarning m!"rule load failed: {e}"
+  | .error e => logWarning m!"rule load failed: {e}"
   | .ok rs =>
     for r in rs.rules do
       logInfo m!"rule [{r.name}] arity={r.arity} — {r.description}"
@@ -119,41 +107,50 @@ set_option linter.unusedSectionVars false
 variable {V : Type*} [DecidableEq V] [Fintype V]
 variable (G : SimpleGraph V) [DecidableRel G.Adj]
 
-theorem reachable_trans_dynamic
+theorem reach_refl (u : V) : G.Reachable u u :=
+  Reachable.refl u
+
+theorem reach_symm {u v : V} (h : G.Reachable u v) : G.Reachable v u :=
+  h.symm
+
+theorem reach_trans {u v w : V}
     (h1 : G.Reachable u v) (h2 : G.Reachable v w) : G.Reachable u w :=
   h1.trans h2
 
-theorem connected_component_eq_of_reachable
-    (h : G.Reachable u v) :
+theorem adj_reach {u v : V} (h : G.Adj u v) : G.Reachable u v :=
+  h.reachable
+
+theorem adj_symm {u v : V} (h : G.Adj u v) : G.Adj v u :=
+  G.symm h
+
+theorem no_self_loops (u : V) : ¬G.Adj u u :=
+  G.loopless.irrefl
+
+theorem reach_same_component {u v : V} (h : G.Reachable u v) :
     G.connectedComponentMk u = G.connectedComponentMk v :=
   ConnectedComponent.sound h
 
-theorem adj_implies_reachable (h : G.Adj u v) : G.Reachable u v :=
-  h.reachable
+theorem same_component_reach {u v : V}
+    (h : G.connectedComponentMk u = G.connectedComponentMk v) :
+    G.Reachable u v :=
+  ConnectedComponent.exact h
 
-theorem reachable_self (u : V) : G.Reachable u u :=
-  Reachable.refl u
+theorem reach_via_two_hops {u v w : V}
+    (h1 : G.Adj u v) (h2 : G.Adj v w) : G.Reachable u w :=
+  reach_trans G h1.reachable h2.reachable
 
-private def transitivityRuleJSON : String :=
-  "{\"rules\": [{\"name\": \"transitivity\", \"arity\": 3, " ++
-  "\"pattern\": \"Reachable a b ∧ Reachable b c → Reachable a c\", " ++
-  "\"lean_tactic\": \"exact SimpleGraph.Reachable.trans\", " ++
-  "\"description\": \"transitivity of reachability\"}]}"
-
-private def componentRuleJSON : String :=
-  "{\"rules\": [{\"name\": \"component_sound\", \"arity\": 2, " ++
-  "\"pattern\": \"Reachable u v → component u = component v\", " ++
-  "\"lean_tactic\": \"exact SimpleGraph.ConnectedComponent.sound\", " ++
-  "\"description\": \"reachable implies same component\"}]}"
+theorem adj_same_component {u v : V} (h : G.Adj u v) :
+    G.connectedComponentMk u = G.connectedComponentMk v :=
+  reach_same_component G h.reachable
 
 example (G : SimpleGraph V) (h1 : G.Reachable u v) (h2 : G.Reachable v w) :
     G.Reachable u w := by
-  apply_dynamic_rules transitivityRuleJSON
+  apply_dynamic_rules "{\"rules\": [{\"name\": \"transitivity\", \"arity\": 3, \"pattern\": \"Reachable a b \u2227 Reachable b c \u2192 Reachable a c\", \"lean_tactic\": \"exact SimpleGraph.Reachable.trans\", \"description\": \"transitivity of reachability\"}]}"
   all_goals (first | exact h1.trans h2 | exact h1 | exact h2 | exact Reachable.refl _)
 
 example (G : SimpleGraph V) (h : G.Reachable u v) :
     G.connectedComponentMk u = G.connectedComponentMk v := by
-  apply_dynamic_rules componentRuleJSON
+  apply_dynamic_rules "{\"rules\": [{\"name\": \"component_sound\", \"arity\": 2, \"pattern\": \"Reachable u v \u2192 component u = component v\", \"lean_tactic\": \"exact SimpleGraph.ConnectedComponent.sound\", \"description\": \"reachable implies same component\"}]}"
   all_goals (first | exact ConnectedComponent.sound h | exact h)
 
-end NeuroSymbolic
+end Form

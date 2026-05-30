@@ -1,7 +1,107 @@
 {
-  "_note": "Written by content/gnn_model.py at runtime. Do not edit manually.",
-  "vertex_count": 0,
-  "base_edges": [],
+  "vertex_count": 6,
+  "base_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      5,
+      2
+    ]
+  ],
   "threshold": 0.7,
-  "predictions": []
+  "predictions": [
+    {
+      "source": 0,
+      "target": 1,
+      "confidence": 0.805
+    },
+    {
+      "source": 0,
+      "target": 2,
+      "confidence": 0.8014
+    },
+    {
+      "source": 0,
+      "target": 3,
+      "confidence": 0.7862
+    },
+    {
+      "source": 0,
+      "target": 4,
+      "confidence": 0.7268
+    },
+    {
+      "source": 0,
+      "target": 5,
+      "confidence": 0.805
+    },
+    {
+      "source": 1,
+      "target": 2,
+      "confidence": 0.8011
+    },
+    {
+      "source": 1,
+      "target": 3,
+      "confidence": 0.786
+    },
+    {
+      "source": 1,
+      "target": 4,
+      "confidence": 0.7267
+    },
+    {
+      "source": 1,
+      "target": 5,
+      "confidence": 0.8058
+    },
+    {
+      "source": 2,
+      "target": 3,
+      "confidence": 0.7779
+    },
+    {
+      "source": 2,
+      "target": 4,
+      "confidence": 0.7079
+    },
+    {
+      "source": 2,
+      "target": 5,
+      "confidence": 0.7975
+    },
+    {
+      "source": 3,
+      "target": 4,
+      "confidence": 0.734
+    },
+    {
+      "source": 3,
+      "target": 5,
+      "confidence": 0.7879
+    },
+    {
+      "source": 4,
+      "target": 5,
+      "confidence": 0.7343
+    }
+  ]
 }
